@@ -6,6 +6,21 @@ import { type Prisma, PrismaClient } from "./generated/prisma/client";
 const connectionString =
 	process.env.NODE_ENV === "test" ? testDatabase() : liveDatabase();
 
+// The PrismaPg driver adapter does not honor the `?schema=` parameter the way the
+// native query engine does: without an explicit schema it qualifies generated SQL
+// with `public.`, so tables that live in another schema (e.g. `crm`) are reported as
+// missing at runtime even though migrations created them. Read the schema from the
+// connection string and hand it to the adapter so queries are qualified correctly.
+const connectionSchema = schemaFromConnectionString(connectionString);
+
+function schemaFromConnectionString(url: string): string | undefined {
+	try {
+		return new URL(url).searchParams.get("schema") ?? undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 function liveDatabase(): string {
 	const url = process.env.DATABASE_URL;
 
@@ -100,7 +115,10 @@ const logDefinitions: Prisma.LogDefinition[] = [
 
 const createPrismaClient = () => {
 	const client = new PrismaClient({
-		adapter: new PrismaPg({ connectionString }),
+		adapter: new PrismaPg(
+			{ connectionString },
+			connectionSchema ? { schema: connectionSchema } : undefined,
+		),
 		log: logDefinitions,
 	});
 
