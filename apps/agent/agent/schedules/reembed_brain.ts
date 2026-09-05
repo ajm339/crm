@@ -9,6 +9,8 @@ import { reembedUnindexed } from "../lib/handsome-brain";
 export default defineSchedule({
 	cron: "*/5 * * * *",
 	async run({ waitUntil }) {
-		waitUntil(reembedUnindexed(10));
+		// Batch sized to drain a normal burst of captures in one pass while staying
+		// well inside the invocation; the 5-min cadence catches anything larger.
+		waitUntil(reembedUnindexed(25));
 	},
 });
