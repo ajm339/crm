@@ -136,6 +136,86 @@ export async function searchPipelineLeads(
 	return rows.map(mapLead);
 }
 
+// The pipeline status machine, mirrored from @wbp/pipeline-core status.ts so eve
+// can change a lead's status without being able to make an illegal jump — the
+// same guard Scout/Build/BizDev get from the Repo. Keep in sync with that file.
+const LEAD_TRANSITIONS: Record<string, string[]> = {
+	discovered: ["verified_no_site", "verified_bad_site", "rejected_has_site"],
+	verified_no_site: ["researched", "closed_lost"],
+	verified_bad_site: ["researched", "closed_lost"],
+	rejected_has_site: [],
+	researched: ["landing_drafted", "closed_lost"],
+	landing_drafted: ["landing_deployed"],
+	landing_deployed: ["outreach_queued"],
+	outreach_queued: ["outreach_approved", "closed_lost"],
+	outreach_approved: ["contacted"],
+	contacted: ["replied", "closed_lost"],
+	replied: ["in_conversation", "closed_lost"],
+	in_conversation: ["requirements_gathered", "closed_lost"],
+	requirements_gathered: ["pitch_drafted"],
+	pitch_drafted: ["pitch_approved", "closed_lost"],
+	pitch_approved: ["pitched"],
+	pitched: ["aligned", "closed_lost"],
+	aligned: ["build_in_progress"],
+	build_in_progress: ["built"],
+	built: ["delivered_replit"],
+	delivered_replit: ["closed_won", "closed_lost"],
+	closed_won: [],
+	closed_lost: [],
+};
+
+export interface LeadUpdate {
+	status?: string;
+	disposition?: string;
+	dispositionReason?: string;
+}
+
+/**
+ * Update a pipeline lead. A status change is validated against the status machine
+ * (an illegal jump throws, so eve can advance a lead but never corrupt the
+ * pipeline); disposition/reason are free edits. Every change logs a `public.events`
+ * row as agent `eve` for the audit trail the other agents share.
+ */
+export async function updateLead(leadId: string, patch: LeadUpdate): Promise<PipelineLead> {
+	const cur = await db.$queryRawUnsafe<Array<{ status: string | null }>>(
+		`SELECT status FROM public.leads WHERE id = $1 LIMIT 1`,
+		leadId,
+	);
+	const curRow = cur[0];
+	if (!curRow) throw new Error(`No pipeline lead with id ${leadId}.`);
+
+	if (patch.status !== undefined) {
+		const from = curRow.status ?? "";
+		const allowed = LEAD_TRANSITIONS[from];
+		if (!allowed) throw new Error(`Unknown current status "${from}" for lead ${leadId}.`);
+		if (from !== patch.status && !allowed.includes(patch.status)) {
+			throw new Error(
+				`Illegal status transition ${from} -> ${patch.status}. Allowed from ${from}: ${allowed.join(", ") || "(none)"}.`,
+			);
+		}
+	}
+
+	const sets: string[] = [];
+	const vals: unknown[] = [];
+	let i = 1;
+	if (patch.status !== undefined) { sets.push(`status = $${i++}`); vals.push(patch.status); }
+	if (patch.disposition !== undefined) { sets.push(`disposition = $${i++}`); vals.push(patch.disposition); }
+	if (patch.dispositionReason !== undefined) { sets.push(`disposition_reason = $${i++}`); vals.push(patch.dispositionReason); }
+	if (sets.length === 0) throw new Error("Nothing to update (provide status, disposition, or dispositionReason).");
+	vals.push(leadId);
+	await db.$queryRawUnsafe(`UPDATE public.leads SET ${sets.join(", ")} WHERE id = $${i}`, ...vals);
+
+	await db.$queryRawUnsafe(
+		`INSERT INTO public.events (lead_id, agent, action, detail) VALUES ($1, 'eve', 'update_lead', $2::jsonb)`,
+		leadId,
+		JSON.stringify(patch),
+	);
+
+	const updated = await readPipelineLead(leadId);
+	if (!updated) throw new Error(`Lead ${leadId} vanished after update.`);
+	return updated;
+}
+
 function mapLead(r: Record<string, unknown>): PipelineLead {
 	return {
 		id: String(r.id),
