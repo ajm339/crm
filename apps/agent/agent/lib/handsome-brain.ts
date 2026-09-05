@@ -7,7 +7,130 @@
 // The CRM's Prisma client is schema-qualified to `crm`; these queries name the
 // `public` schema explicitly, so they work regardless of the connection's
 // search_path. Parameters are bound (never interpolated).
+import { createHash } from "node:crypto";
 import { db } from "@crm/db";
+
+// gbrain embeds with voyage-3-large at 1024 dims (embedding_signature
+// "voyage:voyage-3-large:1024"); the Vercel AI Gateway serves that exact model,
+// so eve writes brain pages that are recall-able the same way the CLI's are.
+const EMBED_MODEL = "voyage/voyage-3-large";
+const EMBED_SIGNATURE = "voyage:voyage-3-large:1024";
+
+async function embedText(text: string): Promise<number[]> {
+	const key = process.env.AI_GATEWAY_API_KEY;
+	if (!key) throw new Error("AI_GATEWAY_API_KEY is not set — cannot embed for gbrain.");
+	const r = await fetch("https://ai-gateway.vercel.sh/v1/embeddings", {
+		method: "POST",
+		headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+		body: JSON.stringify({ model: EMBED_MODEL, input: text }),
+	});
+	if (!r.ok) throw new Error(`embed ${r.status}: ${(await r.text()).slice(0, 160)}`);
+	const j = (await r.json()) as { data: Array<{ embedding: number[] }> };
+	const first = j.data[0];
+	if (!first) throw new Error("embed: no embedding returned.");
+	return first.embedding;
+}
+
+function chunkText(text: string, size = 1800): string[] {
+	const paras = text.split(/\n\n+/);
+	const out: string[] = [];
+	let buf = "";
+	for (const p of paras) {
+		if ((buf + "\n\n" + p).length > size && buf) {
+			out.push(buf.trim());
+			buf = p;
+		} else {
+			buf = buf ? buf + "\n\n" + p : p;
+		}
+	}
+	if (buf.trim()) out.push(buf.trim());
+	return out.length ? out : [text];
+}
+
+const vec = (arr: number[]) => `[${arr.join(",")}]`;
+
+/** Re-chunk + re-embed one page's content into content_chunks (matching gbrain's
+ * format), then stamp the page's embedding_signature. Used by both the write tool
+ * and the backlog indexer. */
+async function embedPageChunks(pageId: number, content: string): Promise<number> {
+	await db.$queryRawUnsafe(`DELETE FROM public.content_chunks WHERE page_id = $1`, pageId);
+	const chunks = chunkText(content);
+	for (let i = 0; i < chunks.length; i++) {
+		const chunk = chunks[i] as string;
+		const embedding = await embedText(chunk);
+		await db.$queryRawUnsafe(
+			`INSERT INTO public.content_chunks
+			   (page_id, chunk_index, chunk_text, embedding, model, token_count, chunk_source, modality, embedded_at)
+			 VALUES ($1, $2, $3, $4::vector, 'voyage:voyage-3-large', $5, 'compiled_truth', 'text', now())`,
+			pageId,
+			i,
+			chunk,
+			vec(embedding),
+			Math.ceil(chunk.length / 4),
+		);
+	}
+	await db.$queryRawUnsafe(
+		`UPDATE public.pages SET embedding_signature = $2 WHERE id = $1`,
+		pageId,
+		EMBED_SIGNATURE,
+	);
+	return chunks.length;
+}
+
+/**
+ * Write (create or update) a company-brain page and embed it inline so it is
+ * immediately recall-able by `search_gbrain` and by the other agents' `gbrain
+ * query` — the same as a CLI-written page. Upserts on (source_id, slug).
+ */
+export async function putBrainPage(input: {
+	slug: string;
+	title: string;
+	content: string;
+	type?: string;
+}): Promise<{ slug: string; chunks: number }> {
+	const hash = createHash("sha256").update(input.content).digest("hex");
+	const rows = await db.$queryRawUnsafe<Array<{ id: number }>>(
+		`INSERT INTO public.pages
+		   (source_id, slug, type, title, compiled_truth, content_hash, source_kind, ingested_via, embedding_signature)
+		 VALUES ('default', $1, $2, $3, $4, $5, 'eve', 'eve-agent', NULL)
+		 ON CONFLICT (source_id, slug) DO UPDATE SET
+		   title = excluded.title,
+		   compiled_truth = excluded.compiled_truth,
+		   content_hash = excluded.content_hash,
+		   embedding_signature = NULL,
+		   updated_at = now()
+		 RETURNING id`,
+		input.slug,
+		input.type ?? "note",
+		input.title,
+		input.content,
+		hash,
+	);
+	const pageId = rows[0]!.id;
+	const chunks = await embedPageChunks(pageId, input.content);
+	return { slug: input.slug, chunks };
+}
+
+/**
+ * Index brain pages that have no embedding yet (the re-embed backlog), so
+ * `gbrain query` recall stays complete. Runs on eve's cron; bounded per run.
+ */
+export async function reembedUnindexed(limit: number): Promise<{ embedded: number; slugs: string[] }> {
+	const pages = await db.$queryRawUnsafe<Array<{ id: number; slug: string; compiled_truth: string | null }>>(
+		`SELECT id, slug, compiled_truth
+		   FROM public.pages
+		  WHERE embedding_signature IS NULL AND deleted_at IS NULL AND coalesce(compiled_truth, '') <> ''
+		  ORDER BY updated_at DESC
+		  LIMIT $1`,
+		limit,
+	);
+	const slugs: string[] = [];
+	for (const p of pages) {
+		await embedPageChunks(p.id, p.compiled_truth ?? "");
+		slugs.push(p.slug);
+	}
+	return { embedded: pages.length, slugs };
+}
 
 export interface BrainHit {
 	slug: string;
