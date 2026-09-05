@@ -24,18 +24,26 @@ export interface BrainHit {
  * Postgres full-text ranking over the page's compiled content.
  */
 export async function searchBrain(query: string, limit: number): Promise<BrainHit[]> {
+	// gbrain's own recall is vector-semantic; here we approximate with Postgres
+	// full-text over the OR of the query's words (any term can match, ranked by
+	// relevance) — natural-language queries like "eve pricing model" then return
+	// the best pages instead of requiring every word in one page. Terms are
+	// sanitized to bare lexemes so the tsquery can't be injected or malformed.
+	const terms = (query.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((t) => t.length > 1);
+	if (terms.length === 0) return [];
+	const tsquery = terms.join(" | ");
 	const rows = await db.$queryRawUnsafe<BrainHit[]>(
 		`SELECT p.slug,
 		        p.title,
 		        p.type,
 		        left(regexp_replace(coalesce(p.compiled_truth, ''), '\\s+', ' ', 'g'), 600) AS snippet,
-		        ts_rank(p.search_vector, websearch_to_tsquery('english', $1))::float8 AS rank
+		        ts_rank(p.search_vector, to_tsquery('english', $1))::float8 AS rank
 		   FROM public.pages p
 		  WHERE p.deleted_at IS NULL
-		    AND p.search_vector @@ websearch_to_tsquery('english', $1)
+		    AND p.search_vector @@ to_tsquery('english', $1)
 		  ORDER BY rank DESC
 		  LIMIT $2`,
-		query,
+		tsquery,
 		limit,
 	);
 	return rows;
