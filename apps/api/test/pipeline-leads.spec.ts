@@ -124,6 +124,9 @@ afterAll(async () => {
 	await db.fieldDefinition.deleteMany({
 		where: { id: { in: [leadFieldId, dispositionFieldId] } },
 	});
+	await db.fieldDefinition.deleteMany({
+		where: { entity: "COMPANY", key: "lead_version" },
+	});
 	await db.user.deleteMany({ where: { id: ownerId } });
 	await dropPipelineTables();
 });
@@ -290,6 +293,47 @@ describe("with the scouting pipeline in the database", () => {
 		await db.$executeRaw`
 			UPDATE public.leads SET disposition = 'pursue' WHERE id = ${pursueLead}::uuid`;
 		await pipeline.ensureCompanies();
+	});
+
+	it("labels each company with Scout's lead version", async () => {
+		expect(
+			await db.fieldDefinition.count({ where: { key: "lead_version" } }),
+		).toBe(0);
+
+		await db.$executeRawUnsafe(
+			"ALTER TABLE public.leads ADD COLUMN lead_version text",
+		);
+		await db.$executeRaw`
+			UPDATE public.leads SET lead_version = 'v1' WHERE id = ${pursueLead}::uuid`;
+		await db.$executeRaw`
+			UPDATE public.leads SET lead_version = 'v2' WHERE id = ${passLead}::uuid`;
+
+		expect(await pipeline.ensureCompanies()).toMatchObject({
+			created: 0,
+			relabeled: 2,
+		});
+		const field = await db.fieldDefinition.findUniqueOrThrow({
+			where: { entity_key: { entity: "COMPANY", key: "lead_version" } },
+			include: { options: true },
+		});
+		expect(field).toMatchObject({
+			label: "Lead version",
+			type: "SELECT",
+			showOnFilter: true,
+		});
+		const option = (label: string) =>
+			field.options.find((o) => o.label === label)?.id;
+		const version = async (leadId: string) =>
+			(await companyFor(leadId)).fieldValues.find((v) => v.fieldId === field.id)
+				?.optionId;
+		expect(await version(pursueLead)).toBe(option("v1"));
+		expect(await version(passLead)).toBe(option("v2"));
+
+		await db.$executeRaw`
+			UPDATE public.leads SET lead_version = 'v2' WHERE id = ${pursueLead}::uuid`;
+		expect(await pipeline.ensureCompanies()).toMatchObject({ relabeled: 1 });
+		expect(await version(pursueLead)).toBe(option("v2"));
+		expect(field.options).toHaveLength(2);
 	});
 
 	it("shows the lead's research live on the company record", async () => {

@@ -7,6 +7,7 @@ import {
 	DISPOSITION_FIELD_KEY,
 	DISPOSITION_LABELS,
 	LEAD_ID_FIELD_KEY,
+	LEAD_VERSION_FIELD,
 	type PipelineLead,
 	toPipelineLead,
 } from "./pipeline-lead";
@@ -16,7 +17,13 @@ const BATCH = 200;
 type MissingLead = {
 	id: string;
 	name: string;
-	disposition: string | null;
+	labels: Record<string, string | null>;
+};
+
+type LabelField = {
+	fieldId: string;
+	column: string;
+	optionFor: (value: string | null) => string | undefined;
 };
 
 export type EnsureCompaniesResult = {
@@ -107,20 +114,17 @@ export class PipelineLeadsService {
 		}
 		result.available = true;
 
-		const dispositionField = fields.find(
-			(f) => f.key === DISPOSITION_FIELD_KEY,
+		const labels = await this.labelFields(
+			fields.find((f) => f.key === DISPOSITION_FIELD_KEY),
 		);
-		const optionFor = (disposition: string | null) => {
-			const label = disposition ? DISPOSITION_LABELS[disposition] : undefined;
-			return label
-				? dispositionField?.options.find((o) => o.label === label)?.id
-				: undefined;
-		};
 
 		const ownerId = await this.ownerId();
 
 		const missing = await this.db.$queryRaw<MissingLead[]>`
-			SELECT l.id::text AS id, l.name, l.disposition
+			SELECT l.id::text AS id, l.name,
+			       jsonb_build_object(
+			         'disposition', to_jsonb(l)->>'disposition',
+			         'lead_version', to_jsonb(l)->>'lead_version') AS labels
 			  FROM public.leads l
 			 WHERE NOT EXISTS (
 			         SELECT 1 FROM "fieldValue" fv
@@ -129,7 +133,10 @@ export class PipelineLeadsService {
 			 LIMIT ${BATCH}`;
 
 		for (const lead of missing) {
-			const optionId = optionFor(lead.disposition);
+			const labelValues = labels.flatMap((label) => {
+				const optionId = label.optionFor(lead.labels[label.column] ?? null);
+				return optionId ? [{ fieldId: label.fieldId, optionId }] : [];
+			});
 			try {
 				await this.db.company.create({
 					data: {
@@ -139,9 +146,7 @@ export class PipelineLeadsService {
 						fieldValues: {
 							create: [
 								{ fieldId: leadField.id, text: lead.id },
-								...(dispositionField && optionId
-									? [{ fieldId: dispositionField.id, optionId }]
-									: []),
+								...labelValues,
 							],
 						},
 					},
@@ -156,50 +161,127 @@ export class PipelineLeadsService {
 			}
 		}
 
-		if (dispositionField) {
-			result.relabeled = await this.relabel(
-				leadField.id,
-				dispositionField.id,
-				optionFor,
-			);
+		for (const label of labels) {
+			result.relabeled += await this.relabel(leadField.id, label);
 		}
 
 		this.logger.log({ message: "Pipeline leads ensured", ...result });
 		return result;
 	}
 
+	private async labelFields(
+		disposition:
+			| { id: string; options: { id: string; label: string }[] }
+			| undefined,
+	): Promise<LabelField[]> {
+		const labels: LabelField[] = [];
+		if (disposition) {
+			labels.push(
+				this.labelField(disposition, "disposition", DISPOSITION_LABELS),
+			);
+		}
+		const leadVersion = (await this.hasLeadColumn(LEAD_VERSION_FIELD.key))
+			? await this.leadVersionField()
+			: null;
+		if (leadVersion) {
+			labels.push(
+				this.labelField(
+					leadVersion,
+					LEAD_VERSION_FIELD.key,
+					LEAD_VERSION_FIELD.labels,
+				),
+			);
+		}
+		return labels;
+	}
+
+	private labelField(
+		field: { id: string; options: { id: string; label: string }[] },
+		column: string,
+		names: Record<string, string>,
+	): LabelField {
+		return {
+			fieldId: field.id,
+			column,
+			optionFor: (value) => {
+				const label = value ? names[value] : undefined;
+				return label
+					? field.options.find((o) => o.label === label)?.id
+					: undefined;
+			},
+		};
+	}
+
+	private async leadVersionField() {
+		const labels = Object.values(LEAD_VERSION_FIELD.labels);
+		const field = await this.db.fieldDefinition.upsert({
+			where: {
+				entity_key: { entity: "COMPANY", key: LEAD_VERSION_FIELD.key },
+			},
+			create: {
+				entity: "COMPANY",
+				key: LEAD_VERSION_FIELD.key,
+				label: LEAD_VERSION_FIELD.label,
+				type: "SELECT",
+				agentFilled: false,
+				showOnFilter: true,
+				position: LEAD_VERSION_FIELD.position,
+				options: {
+					create: labels.map((label, position) => ({ label, position })),
+				},
+			},
+			update: {},
+			include: { options: { where: { archivedAt: null } } },
+		});
+		if (field.archivedAt) return null;
+		const absent = labels.filter(
+			(label) => !field.options.some((o) => o.label === label),
+		);
+		if (absent.length === 0) return field;
+		await this.db.fieldOption.createMany({
+			data: absent.map((label) => ({
+				fieldId: field.id,
+				label,
+				position: labels.indexOf(label),
+			})),
+		});
+		return this.db.fieldDefinition.findUniqueOrThrow({
+			where: { id: field.id },
+			include: { options: { where: { archivedAt: null } } },
+		});
+	}
+
 	private async relabel(
 		leadFieldId: string,
-		dispositionFieldId: string,
-		optionFor: (disposition: string | null) => string | undefined,
+		label: LabelField,
 	): Promise<number> {
 		const rows = await this.db.$queryRaw<
 			Array<{
 				companyId: string;
-				disposition: string | null;
+				value: string | null;
 				optionId: string | null;
 			}>
 		>`
-			SELECT link."companyId", l.disposition, d."optionId"
+			SELECT link."companyId", to_jsonb(l)->>${label.column} AS value, d."optionId"
 			  FROM "fieldValue" link
 			  JOIN public.leads l ON l.id::text = link.text
 			  LEFT JOIN "fieldValue" d
-			         ON d."companyId" = link."companyId" AND d."fieldId" = ${dispositionFieldId}
+			         ON d."companyId" = link."companyId" AND d."fieldId" = ${label.fieldId}
 			 WHERE link."fieldId" = ${leadFieldId} AND link."companyId" IS NOT NULL`;
 
 		let changed = 0;
 		for (const row of rows) {
-			const optionId = optionFor(row.disposition);
+			const optionId = label.optionFor(row.value);
 			if (!optionId || optionId === row.optionId) continue;
 			await this.db.fieldValue.upsert({
 				where: {
 					fieldId_companyId: {
-						fieldId: dispositionFieldId,
+						fieldId: label.fieldId,
 						companyId: row.companyId,
 					},
 				},
 				create: {
-					fieldId: dispositionFieldId,
+					fieldId: label.fieldId,
 					companyId: row.companyId,
 					optionId,
 				},
@@ -208,6 +290,15 @@ export class PipelineLeadsService {
 			changed += 1;
 		}
 		return changed;
+	}
+
+	private async hasLeadColumn(column: string): Promise<boolean> {
+		const [row] = await this.db.$queryRaw<Array<{ present: boolean }>>`
+			SELECT EXISTS (
+			         SELECT 1 FROM information_schema.columns
+			          WHERE table_schema = 'public' AND table_name = 'leads'
+			            AND column_name = ${column}) AS present`;
+		return row?.present === true;
 	}
 
 	private async ownerId(): Promise<string | null> {

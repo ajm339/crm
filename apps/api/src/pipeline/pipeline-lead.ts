@@ -7,6 +7,13 @@ export const DISPOSITION_LABELS: Record<string, string> = {
 	not_worth_pursuing: "Not worth pursuing",
 };
 
+export const LEAD_VERSION_FIELD = {
+	key: "lead_version",
+	label: "Lead version",
+	position: 103,
+	labels: { v1: "v1", v2: "v2" } as Record<string, string>,
+};
+
 const WEEK = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
 export type PipelineLeadRow = {
