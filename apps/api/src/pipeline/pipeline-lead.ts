@@ -34,6 +34,8 @@ export type PipelineLead = {
 		role: string | null;
 		source: string | null;
 		checkedAt: string | null;
+		phones: { number: string; lineType: string | null }[];
+		emails: { address: string; verdict: string | null }[];
 	} | null;
 	ownerStatus: "found" | "not_determined" | null;
 	summary: string | null;
@@ -77,6 +79,24 @@ function bestMapsRank(packet: Record<string, unknown> | null) {
 	return best;
 }
 
+function entries<T>(
+	values: unknown,
+	legacy: unknown,
+	valueKey: string,
+	labelKey: string,
+	build: (value: string, label: string | null) => T,
+): T[] {
+	const out: T[] = [];
+	for (const entry of list(values)) {
+		const row = record(entry);
+		const value = row ? text(row[valueKey]) : text(entry);
+		if (value) out.push(build(value, row ? text(row[labelKey]) : null));
+	}
+	const single = text(legacy);
+	if (out.length === 0 && single) out.push(build(single, null));
+	return out;
+}
+
 function pickOwner(contacts: Record<string, unknown> | null) {
 	const people = list(contacts?.people).map(record).filter(Boolean) as Record<
 		string,
@@ -92,6 +112,20 @@ function pickOwner(contacts: Record<string, unknown> | null) {
 		role: text(person.role),
 		source: text(person.source),
 		checkedAt: text(person.checked_at) ?? text(person.checkedAt),
+		phones: entries(
+			person.phones,
+			person.phone,
+			"number",
+			"line_type",
+			(number, lineType) => ({ number, lineType }),
+		),
+		emails: entries(
+			person.emails,
+			person.email,
+			"address",
+			"verdict",
+			(address, verdict) => ({ address, verdict }),
+		),
 	};
 }
 

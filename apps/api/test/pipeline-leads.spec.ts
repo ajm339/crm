@@ -205,6 +205,11 @@ describe("with the scouting pipeline in the database", () => {
 							role: "Owner",
 							source: "Oklahoma SOS registry",
 							checked_at: "2026-10-18T12:00:00.000Z",
+							phones: [
+								{ number: "(918) 555-0199", line_type: "mobile" },
+								{ number: "" },
+							],
+							emails: [{ address: "jorge@example.test", verdict: "valid" }],
 						},
 					],
 				})}::jsonb,
@@ -300,6 +305,8 @@ describe("with the scouting pipeline in the database", () => {
 				role: "Owner",
 				source: "Oklahoma SOS registry",
 				checkedAt: "2026-10-18T12:00:00.000Z",
+				phones: [{ number: "(918) 555-0199", lineType: "mobile" }],
+				emails: [{ address: "jorge@example.test", verdict: "valid" }],
 			},
 			ownerStatus: "found",
 			summary:
@@ -344,6 +351,30 @@ describe("with the scouting pipeline in the database", () => {
 			owner: null,
 			ownerStatus: "not_determined",
 		});
+	});
+
+	it("reads an owner saved in the older single phone/email shape", async () => {
+		await db.$executeRaw`
+			UPDATE public.research
+			   SET contacts = ${JSON.stringify({
+						people: [
+							{
+								name: "Sam Ortiz",
+								role: "Owner",
+								email: "sam@example.test",
+								phone: null,
+							},
+						],
+					})}::jsonb
+			 WHERE lead_id = ${passLead}::uuid`;
+		const company = await companyFor(passLead);
+		const record = await companies.byId(company.id);
+		expect(record.pipelineLead?.owner).toMatchObject({
+			name: "Sam Ortiz",
+			phones: [],
+			emails: [{ address: "sam@example.test", verdict: null }],
+		});
+		expect(record.pipelineLead?.ownerStatus).toBe("found");
 	});
 
 	it("leaves a company without a lead untouched", async () => {

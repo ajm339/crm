@@ -195,6 +195,12 @@ export const companyPipelineLeadOutput = z.object({
 			role: z.string().nullable(),
 			source: z.string().nullable(),
 			checkedAt: z.string().nullable(),
+			phones: z.array(
+				z.object({ number: z.string(), lineType: z.string().nullable() }),
+			),
+			emails: z.array(
+				z.object({ address: z.string(), verdict: z.string().nullable() }),
+			),
 		})
 		.nullable(),
 	ownerStatus: z.enum(["found", "not_determined"]).nullable(),

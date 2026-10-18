@@ -62,6 +62,10 @@ function Value({ children }: { children: ReactNode }) {
 	);
 }
 
+function humanize(value: string): string {
+	return value.replaceAll("_", " ");
+}
+
 function Owner({ lead }: { lead: PipelineLead }) {
 	const { owner } = lead;
 	if (!owner?.name) {
@@ -86,6 +90,26 @@ function Owner({ lead }: { lead: PipelineLead }) {
 					) : null}
 				</span>
 			) : null}
+			{owner.phones.map((phone) => (
+				<span key={phone.number}>
+					{phone.number}
+					{phone.lineType ? (
+						<span className="text-muted-foreground">
+							{` · ${humanize(phone.lineType)}`}
+						</span>
+					) : null}
+				</span>
+			))}
+			{owner.emails.map((email) => (
+				<span key={email.address} className="break-all">
+					{email.address}
+					{email.verdict ? (
+						<span className="text-muted-foreground">
+							{` · ${humanize(email.verdict)}`}
+						</span>
+					) : null}
+				</span>
+			))}
 		</span>
 	);
 }
