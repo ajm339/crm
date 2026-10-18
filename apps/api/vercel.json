@@ -6,10 +6,6 @@
 			"schedule": "*/5 * * * *"
 		},
 		{
-			"path": "/internal/pipeline/leads",
-			"schedule": "*/5 * * * *"
-		},
-		{
 			"path": "/internal/sync/rates",
 			"schedule": "0 6 * * *"
 		},

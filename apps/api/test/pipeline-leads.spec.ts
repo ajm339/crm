@@ -11,17 +11,13 @@ import { PipelineLeadsService } from "../src/pipeline/pipeline-leads.service";
 import { withDiscardedCrmEvents } from "./agent-trigger.stub";
 
 const suffix = process.env.TEST_RUN_ID ?? "pipeline-spec";
-const ownerEmail = `pipeline-owner-${suffix}@example.test`;
 const pursueLead = "6f1c9a52-0d1e-4f57-9a43-2d8f1b7c0a11";
 const passLead = "0b7e2d44-8c3a-4e61-b5f2-9e1d6a3c4b22";
 
 const config = (values: Record<string, string | undefined>) =>
 	({ get: (key: string) => values[key] }) as never;
 
-const pipeline = new PipelineLeadsService(
-	db,
-	config({ PIPELINE_LEAD_OWNER_EMAIL: ownerEmail }),
-);
+const pipeline = new PipelineLeadsService(db, config({}));
 
 const agent = {
 	companyCreated: async () => undefined,
@@ -42,11 +38,7 @@ const companies = new CompaniesService(
 	pipeline,
 );
 
-let ownerId: string;
 let leadFieldId: string;
-let dispositionFieldId: string;
-let pursueOptionId: string;
-let passOptionId: string;
 
 async function companyFor(leadId: string) {
 	const link = await db.fieldValue.findFirstOrThrow({
@@ -68,15 +60,6 @@ async function dropPipelineTables() {
 beforeAll(async () => {
 	await dropPipelineTables();
 
-	const owner = await db.user.create({
-		data: {
-			id: `pipeline-owner-${suffix}`,
-			name: "Handsome Websites",
-			email: ownerEmail,
-		},
-	});
-	ownerId = owner.id;
-
 	const leadField = await db.fieldDefinition.create({
 		data: {
 			entity: "COMPANY",
@@ -89,28 +72,18 @@ beforeAll(async () => {
 	});
 	leadFieldId = leadField.id;
 
-	const disposition = await db.fieldDefinition.create({
-		data: {
-			entity: "COMPANY",
-			key: "disposition",
-			label: "Disposition",
-			type: "SELECT",
-			agentFilled: false,
-			position: 100,
-			options: {
-				create: [
-					{ label: "Pursue", position: 0 },
-					{ label: "Not worth pursuing", position: 1 },
-				],
+	for (const [leadId, name] of [
+		[pursueLead, "Jesus Seed Lawn Care"],
+		[passLead, "Loose Leaf Lawn Care"],
+	] as const) {
+		await db.company.create({
+			data: {
+				name,
+				source: "MANUAL",
+				fieldValues: { create: [{ fieldId: leadFieldId, text: leadId }] },
 			},
-		},
-		include: { options: true },
-	});
-	dispositionFieldId = disposition.id;
-	pursueOptionId =
-		disposition.options.find((o) => o.label === "Pursue")?.id ?? "";
-	passOptionId =
-		disposition.options.find((o) => o.label === "Not worth pursuing")?.id ?? "";
+		});
+	}
 });
 
 afterAll(async () => {
@@ -122,23 +95,15 @@ afterAll(async () => {
 		where: { id: { in: links.map((l) => l.companyId ?? "") } },
 	});
 	await db.fieldDefinition.deleteMany({
-		where: { id: { in: [leadFieldId, dispositionFieldId] } },
+		where: { id: leadFieldId },
 	});
-	await db.fieldDefinition.deleteMany({
-		where: { entity: "COMPANY", key: "lead_version" },
-	});
-	await db.user.deleteMany({ where: { id: ownerId } });
 	await dropPipelineTables();
 });
 
 describe("without the scouting pipeline in the database", () => {
-	it("does nothing and does not throw", async () => {
-		expect(await pipeline.ensureCompanies()).toEqual({
-			available: false,
-			created: 0,
-			relabeled: 0,
-			failed: 0,
-		});
+	it("shows no research and does not throw", async () => {
+		const company = await companyFor(pursueLead);
+		expect((await companies.byId(company.id)).pipelineLead).toBeNull();
 	});
 });
 
@@ -249,91 +214,6 @@ describe("with the scouting pipeline in the database", () => {
 			VALUES
 				(${pursueLead}::uuid, 'landing', 'jesus-seed-draft', NULL),
 				(${pursueLead}::uuid, 'landing', 'jesus-seed-lawn-care-tulsa', now())`;
-	});
-
-	it("creates one owned, labeled company per lead, and only once", async () => {
-		const first = await pipeline.ensureCompanies();
-		expect(first).toMatchObject({ available: true, created: 2, failed: 0 });
-
-		const pursue = await companyFor(pursueLead);
-		expect(pursue.name).toBe("Jesus Seed Lawn Care");
-		expect(pursue.ownerId).toBe(ownerId);
-		expect(
-			pursue.fieldValues.find((v) => v.fieldId === dispositionFieldId)
-				?.optionId,
-		).toBe(pursueOptionId);
-
-		const pass = await companyFor(passLead);
-		expect(
-			pass.fieldValues.find((v) => v.fieldId === dispositionFieldId)?.optionId,
-		).toBe(passOptionId);
-
-		const second = await pipeline.ensureCompanies();
-		expect(second).toMatchObject({ created: 0, relabeled: 0 });
-		expect(await db.fieldValue.count({ where: { fieldId: leadFieldId } })).toBe(
-			2,
-		);
-	});
-
-	it("follows Scout when a lead is relabeled", async () => {
-		await db.$executeRaw`
-			UPDATE public.leads SET disposition = 'not_worth_pursuing'
-			 WHERE id = ${pursueLead}::uuid`;
-
-		expect(await pipeline.ensureCompanies()).toMatchObject({
-			created: 0,
-			relabeled: 1,
-		});
-		const pursue = await companyFor(pursueLead);
-		expect(
-			pursue.fieldValues.find((v) => v.fieldId === dispositionFieldId)
-				?.optionId,
-		).toBe(passOptionId);
-
-		await db.$executeRaw`
-			UPDATE public.leads SET disposition = 'pursue' WHERE id = ${pursueLead}::uuid`;
-		await pipeline.ensureCompanies();
-	});
-
-	it("labels each company with Scout's lead version", async () => {
-		expect(
-			await db.fieldDefinition.count({ where: { key: "lead_version" } }),
-		).toBe(0);
-
-		await db.$executeRawUnsafe(
-			"ALTER TABLE public.leads ADD COLUMN lead_version text",
-		);
-		await db.$executeRaw`
-			UPDATE public.leads SET lead_version = 'v1' WHERE id = ${pursueLead}::uuid`;
-		await db.$executeRaw`
-			UPDATE public.leads SET lead_version = 'v2' WHERE id = ${passLead}::uuid`;
-
-		expect(await pipeline.ensureCompanies()).toMatchObject({
-			created: 0,
-			relabeled: 2,
-		});
-		const field = await db.fieldDefinition.findUniqueOrThrow({
-			where: { entity_key: { entity: "COMPANY", key: "lead_version" } },
-			include: { options: true },
-		});
-		expect(field).toMatchObject({
-			label: "Lead version",
-			type: "SELECT",
-			showOnFilter: true,
-		});
-		const option = (label: string) =>
-			field.options.find((o) => o.label === label)?.id;
-		const version = async (leadId: string) =>
-			(await companyFor(leadId)).fieldValues.find((v) => v.fieldId === field.id)
-				?.optionId;
-		expect(await version(pursueLead)).toBe(option("v1"));
-		expect(await version(passLead)).toBe(option("v2"));
-
-		await db.$executeRaw`
-			UPDATE public.leads SET lead_version = 'v2' WHERE id = ${pursueLead}::uuid`;
-		expect(await pipeline.ensureCompanies()).toMatchObject({ relabeled: 1 });
-		expect(await version(pursueLead)).toBe(option("v2"));
-		expect(field.options).toHaveLength(2);
 	});
 
 	it("shows the lead's research live on the company record", async () => {

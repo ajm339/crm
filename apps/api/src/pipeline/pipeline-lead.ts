@@ -1,18 +1,5 @@
 export const LEAD_ID_FIELD_KEY = "scout_lead_id";
-export const DISPOSITION_FIELD_KEY = "disposition";
 export const PREVIEW_BASE_URL = "https://handsomesites.com/p";
-
-export const DISPOSITION_LABELS: Record<string, string> = {
-	pursue: "Pursue",
-	not_worth_pursuing: "Not worth pursuing",
-};
-
-export const LEAD_VERSION_FIELD = {
-	key: "lead_version",
-	label: "Lead version",
-	position: 103,
-	labels: { v1: "v1", v2: "v2" } as Record<string, string>,
-};
 
 const WEEK = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
