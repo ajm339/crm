@@ -26,6 +26,7 @@ import { blankToNull, toCents } from "../crm/values";
 import { ConversionService } from "../currency/conversion.service";
 import { InjectDatabase } from "../database/database.constants";
 import { FieldsService } from "../fields/fields.service";
+import { PipelineLeadsService } from "../pipeline/pipeline-leads.service";
 import {
 	activityFacetCounts,
 	activityFilter,
@@ -79,6 +80,7 @@ export class CompaniesService {
 		private readonly stamp: ActivityStampService,
 		private readonly conversion: ConversionService,
 		private readonly fields: FieldsService,
+		private readonly pipelineLeads: PipelineLeadsService,
 	) {}
 
 	async list(input: CompanyListInput): Promise<ListResult<CompanyRow>> {
@@ -259,6 +261,7 @@ export class CompaniesService {
 				baseAmountCents: toCents(deal.baseAmount),
 				expectedCloseDate: deal.expectedCloseDate?.toISOString() ?? null,
 			})),
+			pipelineLead: await this.pipelineLeads.forCompany(id),
 		};
 	}
 

@@ -11,6 +11,7 @@ import { EnrichmentLogService } from "../src/crm/enrichment-log.service";
 import { ConversionService } from "../src/currency/conversion.service";
 import { FieldsService } from "../src/fields/fields.service";
 import { MailboxMatchService } from "../src/mailbox/mailbox-match.service";
+import { PipelineLeadsService } from "../src/pipeline/pipeline-leads.service";
 import { withDiscardedCrmEvents } from "./agent-trigger.stub";
 
 const suffix = process.env.TEST_RUN_ID ?? "record-delete-spec";
@@ -53,6 +54,7 @@ const companies = new CompaniesService(
 	stamp,
 	conversion,
 	fields,
+	new PipelineLeadsService(db, { get: () => undefined } as never),
 );
 const match = new MailboxMatchService(db, directory, agent, log);
 

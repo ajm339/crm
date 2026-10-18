@@ -173,6 +173,36 @@ const companyDetailPrimaryContactOutput = z.object({
 	title: z.string().nullable(),
 });
 
+export const companyPipelineLeadOutput = z.object({
+	id: z.string(),
+	status: z.string().nullable(),
+	disposition: z.string().nullable(),
+	dispositionReason: z.string().nullable(),
+	industry: z.string().nullable(),
+	metro: z.string().nullable(),
+	websiteStatus: z.string().nullable(),
+	websiteUrl: z.string().nullable(),
+	bookingUrl: z.string().nullable(),
+	rating: z.number().nullable(),
+	reviewCount: z.number().nullable(),
+	mapsRank: z.object({ position: z.number(), query: z.string() }).nullable(),
+	address: z.string().nullable(),
+	phone: z.string().nullable(),
+	mapsUrl: z.string().nullable(),
+	owner: z
+		.object({
+			name: z.string().nullable(),
+			role: z.string().nullable(),
+			source: z.string().nullable(),
+			checkedAt: z.string().nullable(),
+		})
+		.nullable(),
+	ownerStatus: z.enum(["found", "not_determined"]).nullable(),
+	summary: z.string().nullable(),
+	previewUrl: z.string().nullable(),
+	reportUrl: z.string().nullable(),
+});
+
 export const companyDetailOutput = z.object({
 	id: z.string(),
 	name: z.string(),
@@ -212,6 +242,7 @@ export const companyDetailOutput = z.object({
 	primaryContact: companyDetailPrimaryContactOutput.nullable(),
 	reportingCurrency: z.string(),
 	deals: z.array(companyDetailDealOutput),
+	pipelineLead: companyPipelineLeadOutput.nullable(),
 });
 
 export const companyOptionOutput = z.array(

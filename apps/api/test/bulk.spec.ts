@@ -10,6 +10,7 @@ import { ActivityStampService } from "../src/crm/activity-stamp.service";
 import { ConversionService } from "../src/currency/conversion.service";
 import { DealsService } from "../src/deals/deals.service";
 import { FieldsService } from "../src/fields/fields.service";
+import { PipelineLeadsService } from "../src/pipeline/pipeline-leads.service";
 import { withDiscardedCrmEvents } from "./agent-trigger.stub";
 
 const suffix = process.env.TEST_RUN_ID ?? "bulk-spec";
@@ -47,6 +48,7 @@ const companies = new CompaniesService(
 	stamp,
 	conversion,
 	fields,
+	new PipelineLeadsService(db, { get: () => undefined } as never),
 );
 const deals = new DealsService(db, agent, stamp, conversion, fields);
 
@@ -255,7 +257,7 @@ describe("moving a selection of deals to a stage", () => {
 				where: { id: deal.id },
 				select: { stage: true },
 			}),
-		).toEqual({ stage: "DEMO_BOOKED" });
+		).toEqual({ stage: "EMAILED" });
 	});
 
 	it("writes the one reason onto every deal's timeline", async () => {

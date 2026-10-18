@@ -1,5 +1,6 @@
 import { plainToInstance, Type } from "class-transformer";
 import {
+	IsEmail,
 	IsEnum,
 	IsInt,
 	IsOptional,
@@ -104,6 +105,10 @@ export class EnvironmentVariables {
 		message: "CRON_SECRET must be at least 16 characters.",
 	})
 	CRON_SECRET?: string;
+
+	@IsOptional()
+	@IsEmail()
+	PIPELINE_LEAD_OWNER_EMAIL?: string;
 
 	@IsOptional()
 	@IsString()

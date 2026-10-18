@@ -1,10 +1,15 @@
 import { DealStage } from "./generated/prisma/enums";
 
 export const OPEN_DEAL_STAGES = [
+	DealStage.EMAILED,
+	DealStage.REPLIED,
 	DealStage.DEMO_BOOKED,
+	DealStage.CALL_HELD,
 	DealStage.QUALIFIED_TO_BUY,
 	DealStage.DECISION_MAKER_BOUGHT_IN,
 	DealStage.CONTRACT_SENT,
+	DealStage.PAID,
+	DealStage.LIVE,
 ] as const;
 
 export const CLOSED_DEAL_STAGES = [
