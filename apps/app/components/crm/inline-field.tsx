@@ -1,8 +1,10 @@
 "use client";
 
+import Launch from "@carbon/icons-react/es/Launch";
 import { Button } from "@crm/ui/components/button";
 import { DatePicker } from "@crm/ui/components/date-picker";
 import { EmptyCellValue } from "@crm/ui/components/empty-cell";
+import { Icon } from "@crm/ui/components/icon";
 import { Input } from "@crm/ui/components/input";
 import {
 	Select,
@@ -17,6 +19,7 @@ import { Textarea } from "@crm/ui/components/textarea";
 import { cn } from "@crm/ui/lib/utils";
 import { useId, useState } from "react";
 import { PROPERTY_LABEL, PROPERTY_ROW } from "@/components/detail-sheet";
+import { openableUrl } from "@/lib/openable-url";
 
 const ROW = cn(PROPERTY_ROW, "items-center");
 const LABEL = PROPERTY_LABEL;
@@ -79,6 +82,11 @@ export function InlineField({
 
 	const sourced = Boolean(provenance) && !editing && shown !== "";
 
+	const href =
+		type === "url" || type === "text"
+			? openableUrl(shown, { assumeHttps: type === "url" })
+			: null;
+
 	const control = editing ? (
 		<Input
 			id={id}
@@ -123,11 +131,31 @@ export function InlineField({
 		</Button>
 	);
 
-	const body =
+	const display =
 		sourced && provenance ? (
 			<SourcedValue source={provenance}>{control}</SourcedValue>
 		) : (
 			control
+		);
+
+	const body =
+		href && !editing ? (
+			<div className="flex min-w-0 items-center gap-1">
+				<div className="min-w-0 flex-1">{display}</div>
+				<Button asChild variant="ghost" size="icon-xs">
+					<a
+						href={href}
+						target="_blank"
+						rel="noopener noreferrer"
+						onClick={(event) => event.stopPropagation()}
+					>
+						<Icon icon={Launch} />
+						<span className="sr-only">Open {label} in a new tab</span>
+					</a>
+				</Button>
+			</div>
+		) : (
+			display
 		);
 
 	if (!suggestion) {
