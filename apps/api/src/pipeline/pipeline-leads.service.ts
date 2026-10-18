@@ -30,12 +30,14 @@ export type EnsureCompaniesResult = {
 export class PipelineLeadsService {
 	private readonly logger = new Logger(PipelineLeadsService.name);
 	private readonly ownerEmail: string | undefined;
+	private readonly photoBaseUrl: string | undefined;
 
 	constructor(
 		@InjectDatabase() private readonly db: Db,
 		config: ConfigService<EnvironmentVariables, true>,
 	) {
 		this.ownerEmail = config.get("PIPELINE_LEAD_OWNER_EMAIL", { infer: true });
+		this.photoBaseUrl = config.get("PIPELINE_PHOTO_BASE_URL", { infer: true });
 	}
 
 	async forCompany(companyId: string): Promise<PipelineLead | null> {
@@ -67,7 +69,9 @@ export class PipelineLeadsService {
 				 WHERE l.id::text = ${leadId}
 				 LIMIT 1`;
 			const row = rows[0];
-			return row ? toPipelineLead(row) : null;
+			return row
+				? toPipelineLead(row, { photoBaseUrl: this.photoBaseUrl })
+				: null;
 		} catch (error) {
 			this.logger.warn(
 				{ message: "Pipeline lead read failed", companyId },

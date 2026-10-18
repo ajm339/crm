@@ -117,7 +117,7 @@ export function InlineField({
 				</span>
 			) : (
 				<span className="truncate text-muted-foreground">
-					{placeholder ?? <EmptyCellValue />}
+					<EmptyCellValue />
 				</span>
 			)}
 		</Button>
@@ -219,7 +219,7 @@ export function InlineTextCell({
 				<span className="truncate">{shown}</span>
 			) : (
 				<span className="truncate text-muted-foreground">
-					{placeholder ?? <EmptyCellValue />}
+					<EmptyCellValue />
 				</span>
 			)}
 		</Button>
@@ -289,7 +289,7 @@ export function InlineTextArea({
 				<span className="min-w-0">{shown}</span>
 			) : (
 				<span className="min-w-0 text-muted-foreground">
-					{placeholder ?? <EmptyCellValue />}
+					<EmptyCellValue />
 				</span>
 			)}
 		</Button>

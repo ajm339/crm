@@ -111,6 +111,10 @@ export class EnvironmentVariables {
 	PIPELINE_LEAD_OWNER_EMAIL?: string;
 
 	@IsOptional()
+	@IsUrl({ require_tld: false })
+	PIPELINE_PHOTO_BASE_URL?: string;
+
+	@IsOptional()
 	@IsString()
 	BLOB_READ_WRITE_TOKEN?: string;
 
