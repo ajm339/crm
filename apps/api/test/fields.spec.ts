@@ -17,6 +17,7 @@ import { ActivityStampService } from "../src/crm/activity-stamp.service";
 import { ConversionService } from "../src/currency/conversion.service";
 import { DealsService } from "../src/deals/deals.service";
 import { FieldsService } from "../src/fields/fields.service";
+import { PipelineLeadsService } from "../src/pipeline/pipeline-leads.service";
 import { withDiscardedCrmEvents } from "./agent-trigger.stub";
 
 const suffix = process.env.TEST_RUN_ID ?? "fields-spec";
@@ -59,6 +60,7 @@ const companies = new CompaniesService(
 	stamp,
 	conversion,
 	fields,
+	new PipelineLeadsService(db, { get: () => undefined } as never),
 );
 const contacts = new ContactsService(
 	db,

@@ -34,6 +34,7 @@ import {
 	savingValue,
 } from "@/components/crm/inline-field";
 import { OwnerCell } from "@/components/crm/owner-cell";
+import { PipelineLeadSection } from "@/components/crm/pipeline-lead";
 import { CompanySocials } from "@/components/crm/social-links";
 import { DealStageMenu } from "@/components/crm/stage-change";
 import { Timeline } from "@/components/crm/timeline/timeline";
@@ -323,6 +324,10 @@ function CompanyOverview({ company }: { company: Company }) {
 		<DetailSheetBody>
 			<DetailSheetSplit>
 				<DetailSheetMain>
+					{company.pipelineLead ? (
+						<PipelineLeadSection lead={company.pipelineLead} />
+					) : null}
+
 					{company.description ? (
 						<DetailSheetSection title="About">
 							<DetailSheetProse>{company.description}</DetailSheetProse>
