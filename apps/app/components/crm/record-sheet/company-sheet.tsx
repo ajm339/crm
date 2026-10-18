@@ -79,9 +79,12 @@ const UNASSIGNED = "unassigned";
 
 function pendingFields(company: Company): string[] {
 	const missing: string[] = [];
-	if (!company.industry) missing.push("industry");
-	if (!company.description) missing.push("description");
-	if (!hasCompanyLinks(company)) missing.push("social links");
+	const lead = company.pipelineLead;
+	if (!company.industry && !lead?.industry) missing.push("industry");
+	if (!company.description && !lead?.summary) missing.push("description");
+	if (!hasCompanyLinks(company) && !lead?.links.social.length) {
+		missing.push("social links");
+	}
 	return missing;
 }
 

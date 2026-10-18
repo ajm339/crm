@@ -173,15 +173,40 @@ const companyDetailPrimaryContactOutput = z.object({
 	title: z.string().nullable(),
 });
 
+const pipelinePersonOutput = z.object({
+	name: z.string().nullable(),
+	role: z.string().nullable(),
+	source: z.string().nullable(),
+	checkedAt: z.string().nullable(),
+	phones: z.array(
+		z.object({ number: z.string(), lineType: z.string().nullable() }),
+	),
+	emails: z.array(
+		z.object({ address: z.string(), verdict: z.string().nullable() }),
+	),
+});
+
+const pipelineRankOutput = z.object({
+	query: z.string(),
+	position: z.number().nullable(),
+});
+
+const pipelineThemesOutput = z.object({
+	praise: z.array(z.string()),
+	complaints: z.array(z.string()),
+});
+
 export const companyPipelineLeadOutput = z.object({
 	id: z.string(),
 	status: z.string().nullable(),
+	score: z.number().nullable(),
 	disposition: z.string().nullable(),
 	dispositionReason: z.string().nullable(),
 	industry: z.string().nullable(),
 	metro: z.string().nullable(),
 	websiteStatus: z.string().nullable(),
 	websiteUrl: z.string().nullable(),
+	websiteEvidence: z.string().nullable(),
 	bookingUrl: z.string().nullable(),
 	rating: z.number().nullable(),
 	reviewCount: z.number().nullable(),
@@ -189,22 +214,141 @@ export const companyPipelineLeadOutput = z.object({
 	address: z.string().nullable(),
 	phone: z.string().nullable(),
 	mapsUrl: z.string().nullable(),
-	owner: z
+	owner: pipelinePersonOutput.nullable(),
+	ownerStatus: z.enum(["found", "not_determined"]).nullable(),
+	people: z.array(pipelinePersonOutput),
+	businessPhones: z.array(z.string()),
+	businessEmails: z.array(z.string()),
+	summary: z.string().nullable(),
+	vibe: z.string().nullable(),
+	services: z.array(z.string()),
+	differentiators: z.array(z.string()),
+	hours: z.array(z.object({ day: z.string().nullable(), hours: z.string() })),
+	logoUrl: z.string().nullable(),
+	brandColors: z.array(z.string()),
+	reviews: z.array(
+		z.object({
+			author: z.string().nullable(),
+			rating: z.number().nullable(),
+			text: z.string(),
+			date: z.string().nullable(),
+			source: z.string().nullable(),
+			url: z.string().nullable(),
+		}),
+	),
+	photos: z.array(
+		z.object({
+			url: z.string(),
+			caption: z.string().nullable(),
+			source: z.string().nullable(),
+		}),
+	),
+	links: z.object({
+		social: z.array(z.string()),
+		yelp: z.string().nullable(),
+		linkedin: z.array(z.string()),
+		directories: z.array(z.string()),
+		sources: z.array(z.string()),
+	}),
+	offer: z
 		.object({
 			name: z.string().nullable(),
-			role: z.string().nullable(),
-			source: z.string().nullable(),
-			checkedAt: z.string().nullable(),
-			phones: z.array(
-				z.object({ number: z.string(), lineType: z.string().nullable() }),
-			),
-			emails: z.array(
-				z.object({ address: z.string(), verdict: z.string().nullable() }),
+			status: z.string().nullable(),
+			dreamOutcome: z.string().nullable(),
+			likelihood: z.string().nullable(),
+			timeDelay: z.string().nullable(),
+			effort: z.string().nullable(),
+			guarantee: z.string().nullable(),
+			slots: z.array(
+				z.object({
+					slot: z.string().nullable(),
+					copy: z.string(),
+					clientFact: z.string().nullable(),
+				}),
 			),
 		})
 		.nullable(),
-	ownerStatus: z.enum(["found", "not_determined"]).nullable(),
-	summary: z.string().nullable(),
+	competition: z
+		.object({
+			baselineAt: z.string().nullable(),
+			queries: z.array(z.string()),
+			maps: z.array(pipelineRankOutput),
+			google: z.array(
+				z.object({
+					query: z.string(),
+					inMapPack: z.boolean().nullable(),
+					inAiOverview: z.boolean().nullable(),
+					organicPosition: z.number().nullable(),
+				}),
+			),
+			yelp: pipelineThemesOutput
+				.extend({
+					rating: z.number().nullable(),
+					reviewCount: z.number().nullable(),
+					claimed: z.boolean().nullable(),
+					position: z.number().nullable(),
+				})
+				.nullable(),
+			nextdoor: pipelineThemesOutput.nullable(),
+			directories: z.array(
+				z.object({
+					name: z.string(),
+					rating: z.number().nullable(),
+					present: z.boolean().nullable(),
+				}),
+			),
+			social: z.array(
+				z.object({
+					network: z.string(),
+					followers: z.number().nullable(),
+					lastPostAt: z.string().nullable(),
+				}),
+			),
+			competitors: z.array(
+				z.object({
+					name: z.string(),
+					whyPicked: z.string().nullable(),
+					maps: z.array(pipelineRankOutput),
+				}),
+			),
+			gaps: z.array(
+				z.object({
+					signal: z.string(),
+					clientValue: z.string().nullable(),
+					winnersMedian: z.string().nullable(),
+					score: z.number().nullable(),
+				}),
+			),
+			aiShareOfVoice: z.array(
+				z.object({
+					engine: z.string().nullable(),
+					prompt: z.string(),
+					namedCount: z.number().nullable(),
+					citedCount: z.number().nullable(),
+					runs: z.number().nullable(),
+				}),
+			),
+		})
+		.nullable(),
+	trafficOpportunities: z.array(
+		z.object({
+			keyword: z.string(),
+			signal: z.string().nullable(),
+			suggestedPage: z.string().nullable(),
+			intent: z.string().nullable(),
+			score: z.number().nullable(),
+		}),
+	),
+	sourcesRun: z.array(
+		z.object({
+			source: z.string(),
+			status: z.string().nullable(),
+			count: z.number().nullable(),
+			costUsd: z.number().nullable(),
+			reason: z.string().nullable(),
+			checkedAt: z.string().nullable(),
+		}),
+	),
 	previewUrl: z.string().nullable(),
 	reportUrl: z.string().nullable(),
 });
