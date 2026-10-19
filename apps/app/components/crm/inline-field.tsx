@@ -140,9 +140,14 @@ export function InlineField({
 
 	const body =
 		href && !editing ? (
-			<div className="flex min-w-0 items-center gap-1">
-				<div className="min-w-0 flex-1">{display}</div>
-				<Button asChild variant="ghost" size="icon-xs">
+			<div className="group/open relative min-w-0">
+				{display}
+				<Button
+					asChild
+					variant="ghost"
+					size="icon-xs"
+					className="absolute top-1/2 right-1 -translate-y-1/2 bg-background opacity-0 focus-visible:opacity-100 group-hover/open:opacity-100"
+				>
 					<a
 						href={href}
 						target="_blank"
