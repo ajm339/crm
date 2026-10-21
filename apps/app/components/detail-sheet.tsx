@@ -279,7 +279,7 @@ export function DetailSheetMain({ children }: { children: ReactNode }) {
 
 export function DetailSheetRail({ children }: { children: ReactNode }) {
 	return (
-		<div className="flex w-full min-w-0 shrink-0 flex-col lg:w-80">
+		<div className="flex w-full min-w-0 shrink-0 flex-col lg:w-[26rem] xl:w-[32rem]">
 			{children}
 		</div>
 	);
@@ -293,7 +293,12 @@ export function DetailSheetProperties({
 	columns?: 1 | 2;
 }) {
 	return (
-		<div className={cn("grid gap-x-8", columns === 2 && "sm:grid-cols-2")}>
+		<div
+			className={cn(
+				"grid grid-cols-1 gap-x-8",
+				columns === 2 && "sm:grid-cols-2",
+			)}
+		>
 			{children}
 		</div>
 	);
@@ -339,7 +344,7 @@ export function DetailSheetProperty({
 	children: ReactNode;
 }) {
 	return (
-		<div className={cn(PROPERTY_ROW, "items-start", wide && "sm:col-span-2")}>
+		<div className={cn(PROPERTY_ROW, "items-start", wide && "col-span-full")}>
 			<span className={cn(PROPERTY_LABEL, PROPERTY_CELL, "text-xs/5")}>
 				{label}
 			</span>
